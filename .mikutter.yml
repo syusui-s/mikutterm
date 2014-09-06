@@ -1,0 +1,11 @@
+---
+slug: :mikutterm
+depends:
+  mikutter: 3.0.0
+  plugin:
+  - gui
+version: '0.2'
+author: syusui_s
+name: mikutterm
+description: mikutterを端末で使えるプラグイン
+repository: git://github.com/syusui-s/mikutterm.git

@@ -6,48 +6,41 @@
 require 'readline'
 
 module Radix62
-  BASE = 62.freeze
-  
-  digitchars = Array::new
-  (0..9).each{|v| digitchars.push(v.to_s)}
-  ("a".."z").each{|v| digitchars.push(v)}
-  ("A".."Z").each{|v| digitchars.push(v)}
-  DIGITCHARS = digitchars
-  
+  BASE = 62
+  DIGITCHARS = ('0'..'9').first(10) + ('a'..'z').first(26) + ('A'..'Z').first(26)
+
+  module_function
+
   def conv(num)
     return nil if not num.kind_of?(Integer)
-    digits = Array::new
-    begin
+
+    digits = []
+    until num.zero?
       digits.push(num % BASE)
-      num /= BASE  
-    end while num != 0
+      num = (num / BASE).to_i
+    end
     digits.reverse end
-  
+
   def unconv(str)
     return nil if str.class != String
     digbase = 1;rtn = 0
     str.split("").map{|val| (t = DIGITCHARS.index(val)).nil? ? (return nil) : t}.reverse.each{|t| rtn+=digbase*t;digbase*=BASE}
     rtn end
-  
+
   def conv_show(num)
     return nil if num.nil?
     rtn = Array::new
     conv(num).each{|t| rtn.push(DIGITCHARS[t])}
     rtn end
-  
+
   def to_show(num)
     return nil if num.nil?
     rtn = ""
     conv_show(num).each{|t| rtn += t}
     rtn end
-  
-  module_function :conv
-  module_function :unconv
-  module_function :conv_show
-  module_function :to_show
 end
 
-Plugin::create(:mikutterm) do
+Plugin::create :mikutterm do
   PROMPT = Environment::NAME
   UNESCAPE_RULE={'&amp;' => '&' ,'&gt;' => '>', '&lt;' => '<'}.freeze
   COLORS = {
@@ -89,13 +82,13 @@ Plugin::create(:mikutterm) do
   CLR_ATUSER   = ["red"]
   CLR_URL      = ["blue"]
   CLR_QT_RT    = ["bold","blue"]
-  
+
   def unescape(text)
     text.gsub(/(&amp;|&gt;|&lt;)/){|m| UNESCAPE_RULE[m]} end
 
   def coloring(text, *a_colors)
     "\e[" + a_colors.map!{|s| COLORS.key?(s) ? COLORS[s] : s }.join(";") + "m#{text}\e[0m" end
-  
+
   def formattime(time)
     time.strftime("%Y%m%d") == Time.now.strftime("%Y%m%d") ? time.strftime("%H:%M:%S") : time.strftime("%y/%m/%d %H:%M:%S") end
 
@@ -134,18 +127,19 @@ Plugin::create(:mikutterm) do
       coloring(item, *CLR_QT_RT) # QTの色
     }
     end
-  
+
   def sysbot(text)
+    puts ""
     puts "#{coloring("("+formattime(Time.now)+")", *CLR_TIME)} #{coloring("mikutter_bot", *CLR_USERID)} #{coloring("(Sys)", *CLR_SYSTEM)} #{msgcoloring(text)}"
   end
-  
+
   def mikuexit
     sysbot("終了します。");Delayer.new{exit} end
-  
+
   def putshelp
     puts "---- commands ----"
     puts "  post/p/t MSG\t\tMSGをツイートします"
-    puts "  reply SID MSG\t\tステータスIDの表すツイート対するリプライを送信します"
+    puts "  r/reply SID MSG\t\tステータスIDの表すツイート対するリプライを送信します"
     puts "  rt/retweet SID\tステータスIDの表すツイートをリツイートします"
     puts "  sleep TIME\t\tTIME秒間プロンプトを表示せずに待機します"
     puts "  sysbot MSG\t\tmikutter_botが呟いたように見えます"
@@ -155,13 +149,13 @@ Plugin::create(:mikutterm) do
   end
 
   def showtweet(m)
-    usrid    = coloring("(@"+unescape(m.idname)+")",*CLR_USERID)
+    usrid    = coloring("(@#{unescape(m.idname)})",*CLR_USERID)
     name     = coloring(unescape(m.user[:name]),*CLR_USERNAME)
     msg      = msgcoloring(formatmsgshow(m))
     src      = coloring("via "+m[:source], *CLR_SOURCE)
     statusid = coloring(Radix62::to_show(m[:id]), *CLR_STATUSID)
     time     = coloring("("+formattime(m[:created])+")", *CLR_TIME)
-    
+
     puts  ""
     print "#{time} #{name} #{usrid}"
     puts  "#{msgtypeclr(m)} "
@@ -170,37 +164,41 @@ Plugin::create(:mikutterm) do
   end
 
   def showfaved(userby,msg)
-    if msg.from_me?
-      puts coloring("("+formattime(Time.now)+")", *CLR_TIME) + " " +
-        coloring("★  #{userby[:name]}（#{userby[:idname]}）さんがツイートをお気に入り登録しました","bold","yellow")
-      showtweet(msg)
-    elsif userby.is_me?
-      puts coloring("("+formattime(Time.now)+")", *CLR_TIME) + " " + coloring("★  ツイートをお気に入り登録しました","bold","yellow")
-      showtweet(msg)
-    end
+    puts coloring("("+formattime(Time.now)+")", *CLR_TIME) + " " +
+      coloring("★  " + (msg.from_me? ? "#{userby[:name]}（#{userby[:idname]}）さんが" : "") + "ツイートをお気に入り登録しました","bold","yellow")
+    showtweet(msg)
   end
    
   def inputline(buf)
     # ツイートする 
-    #   post
-    if buf =~ /^\s*post\s+/ then
-      post = buf.sub(/^\s*post\s*/,"")
-      if post.gsub(/\s*/,"") != "" then
-        Service.primary.post(:message => post);sysbot("post:ツイートしました！") 
+    if buf =~ /^\s*(post|p|t)\s/ then
+      post = buf.sub(/^\s*(post|p|t)\s/, "")
+      if not post.gsub(/\s*/,"").empty? then
+        Service.primary.post(:message => post)
+        sysbot("post:ツイートしました！")
       else sysbot("文字列が空です") end
-    #   p
-    elsif buf =~ /^\s*p\s+/ then
-      post = buf.sub(/^\s*p\s*/,"")
-      if post.gsub(/\s*/,"") != ""
-        Service.primary.post(:message => post);sysbot("post:ツイートしました！")
-      else sysbot("文字列が空です") end
-    elsif buf =~ /^\s*t\s+/ then
-        post = buf.sub(/^\s*t\s+/,"")
-        if post.gsub(/\s*/,"") != ""
-          Service.primary.post(:message => post);sysbot("post:ツイートしました！")
-        else sysbot("文字列が空です") end
+    # リプライ
+    elsif buf =~ /^\s*(r|reply)\s/ then
+      rdxmsgid, post = buf.sub(/^\s*(r|reply)\s/, "").split(" ", 2)
+      if not post.gsub(/\s*/,"").empty? then
+        m = Message.findbyid(Radix62::unconv(rdxmsgid))
+        if m
+          m.post(:message => "@#{m.idname} #{post}")
+          sysbot("reply:返信しました！")
+        else sysbot("reply:指定されたツイートは存在しません") end
+      else sysbot("reply:文字列が空です") end
+    # リツイート
+    elsif buf =~ /^\s*(rt|retweet)\s/ then
+      rdxmsgid = buf.sub(/^\s*(rt|retweet)\s/, "").split(" ", 2)[0]
+      if not rdxmsgid.empty? then
+        m = Message.findbyid(Radix62::unconv(rdxmsgid))
+        if m and m.retweetable? and (not m.retweeted?)
+          m.retweet
+          sysbot("retweet:リツイートしました！")
+        else sysbot("retweet:リツイートできませんでした") end
+      else sysbot("retweet:IDを指定してください") end
     # 終了する
-    elsif buf =~ /^\s*exit/ or buf =~ /^\s*quit/ then
+    elsif buf =~ /^\s*(ex|qu)it/ then
       mikuexit
     # 読込待機時間を設定
     elsif buf =~ /^\s*sleep\s+/ then
@@ -225,26 +223,21 @@ Plugin::create(:mikutterm) do
     # 未定義のコマンド
     else sysbot("\"#{buf}\"というコマンドはありません。ヘルプを見るには、helpと入力してください。") end
   end
- 
+
   # 表示処理
   on_update do |service, messages|
     messages = messages.sort_by{|item| item[:created]}
-    messages.each{|m|
-      showtweet(m)
-    }
+    messages.each{|m| showtweet(m) }
   end
 
   on_favorite do |service, userby, msg|
     showfaved(userby,msg)
   end
 
-  on_boot do |service|
-    Thread.new{
-      while true
-        buf = Readline.readline("#{coloring("#{PROMPT}>", *CLR_INPUT)} ")
-        buf = buf.gsub(/[\t\n\r\f]/,"")
-        inputline(buf)
-      end
-    }
+  Thread.new do
+    loop do
+      buf = Readline.readline(coloring("#{PROMPT}>", *CLR_INPUT)+" ").gsub(/[\t\n\r\f]/, "")
+      inputline(buf)
+    end
   end
 end
