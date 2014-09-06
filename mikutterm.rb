@@ -85,7 +85,7 @@ Plugin::create(:mikutterm) do
   CLR_FAVORITE = ["bold","yellow"]
 
   CLR_ATTWEET  = ["bold","red"]
-  CLR_HASHTAG  = ["megenta"]
+  CLR_HASHTAG  = ["magenta"]
   CLR_ATUSER   = ["red"]
   CLR_URL      = ["blue"]
   CLR_QT_RT    = ["bold","blue"]
